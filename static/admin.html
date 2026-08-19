@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PORTA VOZ — Painel Administrativo</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="admin-layout">
+        <!-- Sidebar or Header -->
+        <header class="admin-header">
+            <div class="header-logo">
+                <span class="logo-icon">🛡️</span>
+                <div>
+                    <h1 class="logo-title">PORTA VOZ</h1>
+                    <span class="logo-tag">Painel Administrativo Privado</span>
+                </div>
+            </div>
+            <div class="header-status">
+                <span class="status-indicator-dot" id="connection-dot"></span>
+                <span class="status-indicator-text" id="connection-text">Conectando...</span>
+            </div>
+        </header>
+
+        <main class="admin-content">
+            <!-- 1. Dashboard Overview -->
+            <section class="dashboard-grid">
+                <!-- Status Cards -->
+                <div class="stat-card stat-nova" id="card-filter-nova" title="Clique para filtrar">
+                    <div class="stat-header">
+                        <span class="stat-emoji">🔴</span>
+                        <span class="stat-title">Novas</span>
+                    </div>
+                    <div class="stat-value" id="count-nova">0</div>
+                </div>
+                <div class="stat-card stat-analise" id="card-filter-analise" title="Clique para filtrar">
+                    <div class="stat-header">
+                        <span class="stat-emoji">🟡</span>
+                        <span class="stat-title">Em análise</span>
+                    </div>
+                    <div class="stat-value" id="count-analise">0</div>
+                </div>
+                <div class="stat-card stat-atendimento" id="card-filter-atendimento" title="Clique para filtrar">
+                    <div class="stat-header">
+                        <span class="stat-emoji">🔵</span>
+                        <span class="stat-title">Em atendimento</span>
+                    </div>
+                    <div class="stat-value" id="count-atendimento">0</div>
+                </div>
+                <div class="stat-card stat-resolvida" id="card-filter-resolvida" title="Clique para filtrar">
+                    <div class="stat-header">
+                        <span class="stat-emoji">🟢</span>
+                        <span class="stat-title">Resolvidas</span>
+                    </div>
+                    <div class="stat-value" id="count-resolvida">0</div>
+                </div>
+                <div class="stat-card stat-total" id="card-filter-clear" title="Clique para limpar filtro de status">
+                    <div class="stat-header">
+                        <span class="stat-emoji">📊</span>
+                        <span class="stat-title">Total Geral</span>
+                    </div>
+                    <div class="stat-value" id="count-total">0</div>
+                </div>
+            </section>
+
+            <!-- 2. Charts Section -->
+            <section class="charts-section">
+                <div class="chart-card">
+                    <h3 class="chart-title">Distribuição por Ocorrência</h3>
+                    <div class="chart-container" id="chart-tipos">
+                        <!-- Bars injected dynamically via JS -->
+                        <div class="chart-empty">Nenhum dado disponível</div>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3 class="chart-title">Distribuição por Local</h3>
+                    <div class="chart-container" id="chart-locais">
+                        <!-- Bars injected dynamically via JS -->
+                        <div class="chart-empty">Nenhum dado disponível</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. Filters and Search Area -->
+            <section class="filters-card">
+                <div class="filters-header">
+                    <h3 class="filters-title">🔎 Pesquisa e Filtros</h3>
+                    <button id="btn-limpar-filtros" class="btn-clear-filters">Limpar Todos</button>
+                </div>
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label for="filter-id" class="filter-label">Pesquisar por ID</label>
+                        <input type="text" id="filter-id" class="filter-input" placeholder="Ex: 45">
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-tipo" class="filter-label">Tipo de Ocorrência</label>
+                        <select id="filter-tipo" class="filter-input">
+                            <option value="">Todos os tipos</option>
+                            <option value="Bullying">Bullying</option>
+                            <option value="Cyberbullying">Cyberbullying</option>
+                            <option value="Assédio sexual">Assédio sexual</option>
+                            <option value="Assédio moral">Assédio moral</option>
+                            <option value="Agressão física">Agressão física</option>
+                            <option value="Agressão verbal">Agressão verbal</option>
+                            <option value="Ameaça">Ameaça</option>
+                            <option value="Preconceito/discriminação">Preconceito/discriminação</option>
+                            <option value="Furto">Furto</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-local" class="filter-label">Local</label>
+                        <select id="filter-local" class="filter-input">
+                            <option value="">Todos os locais</option>
+                            <option value="Pátio">Pátio</option>
+                            <option value="Quadra">Quadra</option>
+                            <option value="Salão Jovem">Salão Jovem</option>
+                            <option value="Sala de aula">Sala de aula</option>
+                            <option value="Banheiro">Banheiro</option>
+                            <option value="Corredor">Corredor</option>
+                            <option value="Entrada/saída">Entrada/saída</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-status" class="filter-label">Status</label>
+                        <select id="filter-status" class="filter-input">
+                            <option value="">Todos os status</option>
+                            <option value="Nova">Nova</option>
+                            <option value="Em análise">Em análise</option>
+                            <option value="Em atendimento">Em atendimento</option>
+                            <option value="Resolvida">Resolvida</option>
+                            <option value="Arquivada">Arquivada</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-anonimo" class="filter-label">Identificação</label>
+                        <select id="filter-anonimo" class="filter-input">
+                            <option value="">Todas</option>
+                            <option value="true">Anônimas</option>
+                            <option value="false">Identificadas</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="filter-data" class="filter-label">Data da Ocorrência</label>
+                        <input type="date" id="filter-data" class="filter-input">
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Table / List Card -->
+            <section class="list-card">
+                <div class="table-container">
+                    <table class="admin-table" id="denuncias-tabela">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tipo da Ocorrência</th>
+                                <th>Data Ocorreu</th>
+                                <th>Local</th>
+                                <th>Data/Hora Envio</th>
+                                <th>Identificação</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-corpo">
+                            <!-- Injected dynamically via JS -->
+                            <tr>
+                                <td colspan="7" class="td-empty">Carregando denúncias...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-footer">
+                    <span id="table-stats-count">Exibindo 0 denúncia(s)</span>
+                </div>
+            </section>
+        </main>
+
+        <!-- Toast Notifications Container -->
+        <div class="toast-container" id="toast-container"></div>
+
+        <!-- Full Details Modal -->
+        <div class="modal-overlay hidden" id="detalhes-modal">
+            <div class="modal-card">
+                <header class="modal-header">
+                    <h2 class="modal-title">Detalhes da Denúncia <span id="modal-id">#0000</span></h2>
+                    <button class="modal-close-btn" id="modal-close-btn">&times;</button>
+                </header>
+                
+                <div class="modal-body">
+                    <!-- Status Actions -->
+                    <div class="modal-status-box">
+                        <label for="modal-status-select" class="modal-status-label">Alterar Status da Ocorrência:</label>
+                        <div class="select-wrapper">
+                            <select id="modal-status-select" class="modal-status-select">
+                                <option value="Nova">Nova</option>
+                                <option value="Em análise">Em análise</option>
+                                <option value="Em atendimento">Em atendimento</option>
+                                <option value="Resolvida">Resolvida</option>
+                                <option value="Arquivada">Arquivada</option>
+                            </select>
+                            <span class="status-change-loader" id="modal-status-loader"></span>
+                        </div>
+                    </div>
+
+                    <!-- Details Fields Grid -->
+                    <div class="modal-info-grid">
+                        <div class="info-block span-2">
+                            <div class="info-label">O que aconteceu:</div>
+                            <div class="info-value text-box" id="modal-descricao">Conteúdo principal da ocorrência...</div>
+                        </div>
+
+                        <div class="info-block">
+                            <div class="info-label">Tipo da Ocorrência:</div>
+                            <div class="info-value" id="modal-tipo">-</div>
+                        </div>
+
+                        <div class="info-block">
+                            <div class="info-label">Quando aconteceu:</div>
+                            <div class="info-value" id="modal-data-ocorrencia">-</div>
+                        </div>
+
+                        <div class="info-block">
+                            <div class="info-label">Onde aconteceu:</div>
+                            <div class="info-value" id="modal-local">-</div>
+                        </div>
+
+                        <div class="info-block">
+                            <div class="info-label">Data e Horário de Envio:</div>
+                            <div class="info-value" id="modal-data-envio">-</div>
+                        </div>
+
+                        <div class="info-block span-2">
+                            <div class="info-label">Mais detalhes:</div>
+                            <div class="info-value text-box" id="modal-detalhes">Nenhum detalhe adicional fornecido.</div>
+                        </div>
+
+                        <div class="info-block span-2" id="modal-identificacao-box">
+                            <div class="info-label">Identificação do Denunciante:</div>
+                            <div class="info-value identificacao-card" id="modal-identificacao">
+                                <!-- Dynamic block -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

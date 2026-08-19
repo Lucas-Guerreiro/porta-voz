@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PORTA VOZ — Canal Seguro de Denúncias Escolares</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-area">
+                <span class="logo-icon">📢</span>
+                <h1 class="logo-title">PORTA VOZ</h1>
+            </div>
+            <p class="logo-subtitle">Canal público, simples e seguro para registrar e acompanhar ocorrências no ambiente escolar.</p>
+        </header>
+
+        <!-- Main Form Section -->
+        <main class="main-content">
+            <!-- Tabs Navigation -->
+            <div class="tabs-nav" id="public-tabs">
+                <button class="tab-btn active" id="tab-enviar">Registrar Ocorrência</button>
+                <button class="tab-btn" id="tab-acompanhar">Acompanhar Ocorrência</button>
+            </div>
+
+            <!-- 1. Form Card (New Report) -->
+            <div id="form-card" class="card">
+                <form id="denuncia-form" novalidate>
+                    <!-- Step 1 -->
+                    <div class="form-group">
+                        <label for="descricao" class="form-label">
+                            <span class="step-num">1</span>
+                            Descreva o que aconteceu
+                        </label>
+                        <p class="form-help">Conte de forma resumida o ocorrido em poucas palavras.</p>
+                        <textarea id="descricao" name="descricao" rows="3" class="form-input" placeholder="Ex: Fui insultado no refeitório por um grupo de alunos hoje de manhã." required></textarea>
+                        <span class="error-msg" id="error-descricao">Este campo é obrigatório.</span>
+                    </div>
+
+                    <!-- Step 2 -->
+                    <div class="form-group">
+                        <label for="tipo" class="form-label">
+                            <span class="step-num">2</span>
+                            Qual foi o tipo da ocorrência?
+                        </label>
+                        <select id="tipo" name="tipo" class="form-input form-select" required>
+                            <option value="" disabled selected>Selecione uma opção...</option>
+                            <option value="Bullying">Bullying</option>
+                            <option value="Cyberbullying">Cyberbullying</option>
+                            <option value="Assédio sexual">Assédio sexual</option>
+                            <option value="Assédio moral">Assédio moral</option>
+                            <option value="Agressão física">Agressão física</option>
+                            <option value="Agressão verbal">Agressão verbal</option>
+                            <option value="Ameaça">Ameaça</option>
+                            <option value="Preconceito/discriminação">Preconceito/discriminação</option>
+                            <option value="Furto">Furto</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                        <span class="error-msg" id="error-tipo">Selecione uma das opções.</span>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="form-group">
+                        <label for="data_ocorrencia" class="form-label">
+                            <span class="step-num">3</span>
+                            Quando aconteceu?
+                        </label>
+                        <input type="date" id="data_ocorrencia" name="data_ocorrencia" class="form-input" required>
+                        <span class="error-msg" id="error-data_ocorrencia">Selecione a data em que ocorreu o fato.</span>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="form-group">
+                        <label for="local" class="form-label">
+                            <span class="step-num">4</span>
+                            Onde aconteceu?
+                        </label>
+                        <select id="local" name="local" class="form-input form-select" required>
+                            <option value="" disabled selected>Selecione o local...</option>
+                            <option value="Pátio">Pátio</option>
+                            <option value="Quadra">Quadra</option>
+                            <option value="Salão Jovem">Salão Jovem</option>
+                            <option value="Sala de aula">Sala de aula</option>
+                            <option value="Banheiro">Banheiro</option>
+                            <option value="Corredor">Corredor</option>
+                            <option value="Entrada/saída">Entrada/saída</option>
+                            <option value="Outro">Outro</option>
+                        </select>
+                        <span class="error-msg" id="error-local">Selecione o local aproximado.</span>
+                    </div>
+
+                    <!-- Step 5 -->
+                    <div class="form-group">
+                        <label for="detalhes" class="form-label">
+                            <span class="step-num">5</span>
+                            Descreva com mais detalhes
+                        </label>
+                        <p class="form-help">Informe detalhes adicionais como quem estava envolvido, possíveis testemunhas ou outras informações importantes.</p>
+                        <textarea id="detalhes" name="detalhes" rows="5" class="form-input" placeholder="Escreva aqui todas as informações detalhadas que puder para ajudar a coordenação..."></textarea>
+                    </div>
+
+                    <!-- Step 6 -->
+                    <div class="form-group privacy-group">
+                        <label class="form-label">
+                            <span class="step-num">6</span>
+                            Deseja se manter anônimo?
+                        </label>
+                        
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="anonimo" name="anonimo" checked>
+                            <span class="checkbox-mark"></span>
+                            <span class="checkbox-label">Quero fazer esta denúncia anonimamente</span>
+                        </label>
+                        <p class="privacy-note">Se marcado, o sistema não salvará nenhuma informação sobre a sua identidade.</p>
+                    </div>
+
+                    <!-- Contact Fields (Shown dynamically if not anonymous) -->
+                    <div id="identificacao-container" class="collapsed">
+                        <div class="form-group">
+                            <label for="nome" class="form-label">Seu Nome</label>
+                            <input type="text" id="nome" name="nome" class="form-input" placeholder="Digite seu nome completo">
+                            <span class="error-msg" id="error-nome">O nome é obrigatório para denúncias identificadas.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="contato" class="form-label">Meio de Contato</label>
+                            <input type="text" id="contato" name="contato" class="form-input" placeholder="Telefone, e-mail ou outro meio de contato">
+                            <span class="error-msg" id="error-contato">Informe um meio de contato para que possamos falar com você.</span>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="submit-container">
+                        <button type="submit" id="btn-enviar" class="btn-submit">
+                            <span class="btn-text">ENVIAR DENÚNCIA</span>
+                            <span class="btn-spinner"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 2. Success State Card (Hidden initially) -->
+            <div id="success-card" class="card success-card hidden">
+                <div class="success-icon-wrapper">
+                    <span class="success-icon">✨</span>
+                </div>
+                <h2 class="success-title">Denúncia Registrada!</h2>
+                <p class="success-desc">Sua ocorrência foi enviada de forma segura para o painel privado da coordenação escolar.</p>
+                
+                <div class="id-badge-container">
+                    <p class="id-badge-label">NÚMERO DE PROTOCOLO / ID</p>
+                    <div class="id-badge-value" id="protocolo-id">#0000</div>
+                </div>
+
+                <div class="success-footer">
+                    <p class="success-safety-note">🛡️ Guarde seu número de protocolo para acompanhar o andamento da ocorrência na aba superior.</p>
+                    <div class="success-buttons-row">
+                        <button id="btn-acompanhar-novo" class="btn-submit">Acompanhar Status</button>
+                        <button id="btn-novo" class="btn-secondary">Nova Ocorrência</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Tracking Card (Hidden initially) -->
+            <div id="tracking-card" class="card hidden">
+                <div class="tracking-header">
+                    <h2 class="tracking-title">Acompanhar Minha Ocorrência</h2>
+                    <p class="tracking-subtitle">Insira o número do seu protocolo/ID abaixo para consultar o status em tempo real.</p>
+                </div>
+                
+                <form id="tracking-form" class="tracking-form-container" novalidate>
+                    <div class="form-group">
+                        <div class="search-input-wrapper">
+                            <input type="text" id="tracking-id" class="form-input" placeholder="Ex: 0005 ou 5" required>
+                            <button type="submit" id="btn-consultar" class="btn-submit">
+                                <span class="btn-text">Consultar</span>
+                                <span class="btn-spinner"></span>
+                            </button>
+                        </div>
+                        <span class="error-msg" id="error-tracking-id">Por favor, digite o número do protocolo.</span>
+                    </div>
+                </form>
+
+                <!-- Search Results Container -->
+                <div id="tracking-result" class="tracking-result-box hidden">
+                    <div class="result-header">
+                        <span class="result-proto" id="result-proto">Protocolo #0000</span>
+                        <span class="badge" id="result-status-badge">Nova</span>
+                    </div>
+                    
+                    <div class="result-details-grid">
+                        <div class="result-detail-item span-2">
+                            <span class="detail-label">O que aconteceu:</span>
+                            <span class="detail-value text-box" id="result-descricao">-</span>
+                        </div>
+                        <div class="result-detail-item">
+                            <span class="detail-label">Tipo de Ocorrência:</span>
+                            <span class="detail-value" id="result-tipo">-</span>
+                        </div>
+                        <div class="result-detail-item">
+                            <span class="detail-label">Local do fato:</span>
+                            <span class="detail-value" id="result-local">-</span>
+                        </div>
+                        <div class="result-detail-item">
+                            <span class="detail-label">Quando aconteceu:</span>
+                            <span class="detail-value" id="result-data-ocorrencia">-</span>
+                        </div>
+                        <div class="result-detail-item">
+                            <span class="detail-label">Data e Hora de Envio:</span>
+                            <span class="detail-value" id="result-data-envio">-</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Dynamic Progress Explanation -->
+                    <div class="status-explanation-card" id="status-explanation">
+                        <!-- Injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Not Found Box -->
+                <div id="tracking-not-found" class="not-found-box hidden">
+                    <span class="not-found-icon">🔍</span>
+                    <p class="not-found-text">Ocorrência não encontrada. Verifique o número digitado e tente novamente.</p>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="app-footer">
+            <p>PORTA VOZ &copy; 2026 — Ambiente escolar seguro e acolhedor.</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

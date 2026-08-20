@@ -118,6 +118,8 @@ def create_denuncia():
             contato = data['contato'].strip()
             
         descricao = data['descricao'].strip()
+        if len(descricao) > 15:
+            return jsonify({"error": "A descrição resumida deve ter no máximo 15 caracteres"}), 400
         data_ocorrencia = data['data_ocorrencia']
         detalhes = data.get('detalhes', '').strip()
         data_envio = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

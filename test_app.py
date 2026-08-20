@@ -57,9 +57,9 @@ class PortaVozTestCase(unittest.TestCase):
         conn.close()
 
     def test_create_anonymous_denuncia(self):
-        """Test sending a valid anonymous report."""
+        """Test sending a valid anonymous report with short description."""
         payload = {
-            "descricao": "Bullying no pátio da escola durante o intervalo.",
+            "descricao": "Bullying pátio",  # 14 chars (under 15 limit)
             "tipo": "Bullying",
             "data_ocorrencia": "2026-08-19",
             "local": "Pátio",
@@ -89,7 +89,7 @@ class PortaVozTestCase(unittest.TestCase):
     def test_create_identified_denuncia(self):
         """Test sending a valid identified report."""
         payload = {
-            "descricao": "Agressão verbal no corredor.",
+            "descricao": "Agressão verbal",  # 15 chars
             "tipo": "Agressão verbal",
             "data_ocorrencia": "2026-08-18",
             "local": "Corredor",
@@ -125,7 +125,7 @@ class PortaVozTestCase(unittest.TestCase):
 
         # 2. Invalid type
         payload = {
-            "descricao": "Teste de tipo inválido.",
+            "descricao": "Tipo inválido",
             "tipo": "TipoInexistente",
             "data_ocorrencia": "2026-08-19",
             "local": "Pátio",
@@ -137,7 +137,7 @@ class PortaVozTestCase(unittest.TestCase):
 
         # 3. Missing contact info for identified report
         payload = {
-            "descricao": "Agressão verbal no corredor.",
+            "descricao": "Agressão",
             "tipo": "Agressão verbal",
             "data_ocorrencia": "2026-08-18",
             "local": "Corredor",
@@ -149,18 +149,29 @@ class PortaVozTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Contato é obrigatório", json.loads(response.data)["error"])
 
+        # 4. Description too long (over 15 characters)
+        payload = {
+            "descricao": "Texto com mais de quinze caracteres de comprimento.", # 51 chars
+            "tipo": "Bullying",
+            "data_ocorrencia": "2026-08-19",
+            "local": "Pátio",
+            "anonimo": True
+        }
+        response = self.client.post('/api/denuncias', data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("máximo 15 caracteres", json.loads(response.data)["error"])
+
     def test_get_denuncias_and_filtering(self):
         """Test retrieving all reports and verifying filter parameters."""
-        # Seed two entries
         d1 = {
-            "descricao": "Bullying no pátio.",
+            "descricao": "Bullying",
             "tipo": "Bullying",
             "data_ocorrencia": "2026-08-19",
             "local": "Pátio",
             "anonimo": True
         }
         d2 = {
-            "descricao": "Furto na sala de aula.",
+            "descricao": "Furto",
             "tipo": "Furto",
             "data_ocorrencia": "2026-08-15",
             "local": "Sala de aula",
@@ -198,9 +209,8 @@ class PortaVozTestCase(unittest.TestCase):
 
     def test_update_status(self):
         """Test status transitions."""
-        # Seed an entry
         d = {
-            "descricao": "Bullying no pátio.",
+            "descricao": "Bullying",
             "tipo": "Bullying",
             "data_ocorrencia": "2026-08-19",
             "local": "Pátio",
@@ -232,9 +242,8 @@ class PortaVozTestCase(unittest.TestCase):
 
     def test_get_public_denuncia_by_id(self):
         """Test retrieving a report through the secure public tracking route."""
-        # Seed an identified report
         d = {
-            "descricao": "Bullying no pátio.",
+            "descricao": "Bullying",
             "tipo": "Bullying",
             "data_ocorrencia": "2026-08-19",
             "local": "Pátio",
@@ -271,4 +280,3 @@ class PortaVozTestCase(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

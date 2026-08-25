@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Detect environment (Vercel static fallback vs API mode)
+    const IS_VERCEL_STATIC = window.location.hostname.endsWith('.vercel.app') || window.location.hostname.includes('vercel') || window.location.search.includes('mock=true');
+    const eventChannel = window.BroadcastChannel ? new BroadcastChannel('porta-voz-events') : null;
+
     // 1. DOM Elements - Form & General
     const form = document.getElementById('denuncia-form');
     const formCard = document.getElementById('form-card');
@@ -36,6 +40,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set max date for occurrence date picker to today
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('data_ocorrencia').setAttribute('max', today);
+
+    // Show warning console log if in Vercel mode
+    if (IS_VERCEL_STATIC) {
+        console.log("ℹ️ PORTA VOZ: Modo Vercel estático detectado. Usando localStorage e BroadcastChannel.");
+    }
 
     // ==========================================
     // TABS NAVIGATION LOGIC
@@ -105,25 +114,75 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setLoading(btnEnviar, true);
 
-        try {
-            const response = await fetch('/api/denuncias', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+        if (IS_VERCEL_STATIC) {
+            // LocalStorage Simulation Mode
+            setTimeout(() => {
+                try {
+                    const localData = localStorage.getItem('denuncias');
+                    const currentList = localData ? JSON.parse(localData) : [];
+                    
+                    const nextId = currentList.length > 0 ? Math.max(...currentList.map(d => d.id)) + 1 : 1;
+                    const dateNow = new Date();
+                    
+                    const newDenuncia = {
+                        id: nextId,
+                        descricao: payload.descricao,
+                        tipo: payload.tipo,
+                        data_ocorrencia: payload.data_ocorrencia,
+                        local: payload.local,
+                        detalhes: payload.detalhes,
+                        anonimo: payload.anonimo,
+                        nome: payload.nome,
+                        contato: payload.contato,
+                        status: 'Nova',
+                        data_envio: dateNow.getFullYear() + '-' + 
+                                    String(dateNow.getMonth() + 1).padStart(2, '0') + '-' + 
+                                    String(dateNow.getDate()).padStart(2, '0') + ' ' + 
+                                    String(dateNow.getHours()).padStart(2, '0') + ':' + 
+                                    String(dateNow.getMinutes()).padStart(2, '0') + ':' + 
+                                    String(dateNow.getSeconds()).padStart(2, '0')
+                    };
+                    
+                    currentList.unshift(newDenuncia);
+                    localStorage.setItem('denuncias', JSON.stringify(currentList));
+                    
+                    // Broadcast event to admin tab
+                    if (eventChannel) {
+                        eventChannel.postMessage({
+                            type: 'nova_denuncia',
+                            data: newDenuncia
+                        });
+                    }
+                    
+                    showSuccess(nextId);
+                } catch (err) {
+                    alert('Erro no simulador local: ' + err.message);
+                } finally {
+                    setLoading(btnEnviar, false);
+                }
+            }, 800); // Simulate network latency
+        } else {
+            // Standard API Mode
+            try {
+                const response = await fetch('/api/denuncias', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-            const result = await response.json();
+                const result = await response.json();
 
-            if (!response.ok) {
-                throw new Error(result.error || 'Erro ao registrar denúncia');
+                if (!response.ok) {
+                    throw new Error(result.error || 'Erro ao registrar denúncia');
+                }
+
+                showSuccess(result.id);
+
+            } catch (error) {
+                alert('Erro: ' + error.message);
+            } finally {
+                setLoading(btnEnviar, false);
             }
-
-            showSuccess(result.id);
-
-        } catch (error) {
-            alert('Erro: ' + error.message);
-        } finally {
-            setLoading(btnEnviar, false);
         }
     });
 
@@ -185,67 +244,93 @@ document.addEventListener('DOMContentLoaded', () => {
         trackingResult.classList.add('hidden');
         trackingNotFound.classList.add('hidden');
 
-        try {
-            const response = await fetch(`/api/denuncias/${id}/publica`);
-            const data = await response.json();
+        if (IS_VERCEL_STATIC) {
+            // LocalStorage Simulation Mode
+            setTimeout(() => {
+                try {
+                    const localData = localStorage.getItem('denuncias');
+                    const currentList = localData ? JSON.parse(localData) : [];
+                    
+                    const found = currentList.find(d => d.id === parseInt(id));
+                    if (!found) {
+                        throw new Error('Protocolo não encontrado');
+                    }
+                    
+                    displayTrackingResult(found);
+                } catch (error) {
+                    trackingNotFound.classList.remove('hidden');
+                } finally {
+                    setLoading(btnConsultar, false);
+                }
+            }, 400); // Simulate network latency
+        } else {
+            // Standard API Mode
+            try {
+                const response = await fetch(`/api/denuncias/${id}/publica`);
+                const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || 'Protocolo não encontrado');
+                if (!response.ok) {
+                    throw new Error(data.error || 'Protocolo não encontrado');
+                }
+
+                displayTrackingResult(data);
+
+            } catch (error) {
+                trackingNotFound.classList.remove('hidden');
+            } finally {
+                setLoading(btnConsultar, false);
             }
-
-            // Populate query result
-            resultProto.textContent = `Protocolo #${String(data.id).padStart(4, '0')}`;
-            
-            // Set Status Badge styling
-            resultStatusBadge.className = 'badge';
-            let badgeClass = 'badge-nova';
-            let explanationClass = 'status-nova';
-            let explanationHtml = '';
-            
-            if (data.status === 'Nova') {
-                badgeClass = 'badge-nova';
-                explanationClass = 'status-nova';
-                explanationHtml = '<strong>🔴 Nova:</strong> Sua ocorrência foi registrada com sucesso no sistema e está na fila para triagem pela coordenação. Nenhuma ação é necessária por sua parte no momento.';
-            } else if (data.status === 'Em análise') {
-                badgeClass = 'badge-analise';
-                explanationClass = 'status-analise';
-                explanationHtml = '<strong>🟡 Em análise:</strong> A equipe pedagógica e de coordenação está analisando as informações fornecidas, as testemunhas apontadas e definindo as medidas de intervenção apropriadas.';
-            } else if (data.status === 'Em atendimento') {
-                badgeClass = 'badge-atendimento';
-                explanationClass = 'status-atendimento';
-                explanationHtml = '<strong>🔵 Em atendimento:</strong> As providências já estão em andamento. A coordenação está conversando com os envolvidos e prestando o suporte institucional necessário.';
-            } else if (data.status === 'Resolvida') {
-                badgeClass = 'badge-resolvida';
-                explanationClass = 'status-resolvida';
-                explanationHtml = '<strong>🟢 Resolvida:</strong> A ocorrência foi concluída e resolvida pela equipe escolar. As devidas ações foram aplicadas e monitoradas.';
-            } else if (data.status === 'Arquivada') {
-                badgeClass = 'badge-arquivada';
-                explanationClass = 'status-arquivada';
-                explanationHtml = '<strong>⚪ Arquivada:</strong> O processo referente a esta ocorrência foi encerrado e arquivado pela coordenação responsável.';
-            }
-            
-            resultStatusBadge.classList.add(badgeClass);
-            resultStatusBadge.textContent = data.status;
-            
-            // Populate text items
-            resultDescricao.textContent = data.descricao;
-            resultTipo.textContent = data.tipo;
-            resultLocal.textContent = data.local;
-            resultDataOcorrencia.textContent = formatarData(data.data_ocorrencia);
-            resultDataEnvio.textContent = formatarDataHora(data.data_envio);
-            
-            // Render explanation card
-            statusExplanation.className = `status-explanation-card ${explanationClass}`;
-            statusExplanation.innerHTML = explanationHtml;
-            
-            // Display Results
-            trackingResult.classList.remove('hidden');
-
-        } catch (error) {
-            trackingNotFound.classList.remove('hidden');
-        } finally {
-            setLoading(btnConsultar, false);
         }
+    }
+
+    function displayTrackingResult(data) {
+        // Populate query result
+        resultProto.textContent = `Protocolo #${String(data.id).padStart(4, '0')}`;
+        
+        // Set Status Badge styling
+        resultStatusBadge.className = 'badge';
+        let badgeClass = 'badge-nova';
+        let explanationClass = 'status-nova';
+        let explanationHtml = '';
+        
+        if (data.status === 'Nova') {
+            badgeClass = 'badge-nova';
+            explanationClass = 'status-nova';
+            explanationHtml = '<strong>🔴 Nova:</strong> Sua ocorrência foi registrada com sucesso no sistema e está na fila para triagem pela coordenação. Nenhuma ação é necessária por sua parte no momento.';
+        } else if (data.status === 'Em análise') {
+            badgeClass = 'badge-analise';
+            explanationClass = 'status-analise';
+            explanationHtml = '<strong>🟡 Em análise:</strong> A equipe pedagógica e de coordenação está analisando as informações fornecidas, as testemunhas apontadas e definindo as medidas de intervenção apropriadas.';
+        } else if (data.status === 'Em atendimento') {
+            badgeClass = 'badge-atendimento';
+            explanationClass = 'status-atendimento';
+            explanationHtml = '<strong>🔵 Em atendimento:</strong> As providências já estão em andamento. A coordenação está conversando com os envolvidos e prestando o suporte institucional necessário.';
+        } else if (data.status === 'Resolvida') {
+            badgeClass = 'badge-resolvida';
+            explanationClass = 'status-resolvida';
+            explanationHtml = '<strong>🟢 Resolvida:</strong> A ocorrência foi concluída e resolvida pela equipe escolar. As devidas ações foram aplicadas e monitoradas.';
+        } else if (data.status === 'Arquivada') {
+            badgeClass = 'badge-arquivada';
+            explanationClass = 'status-arquivada';
+            explanationHtml = '<strong>⚪ Arquivada:</strong> O processo referente a esta ocorrência foi encerrado e arquivado pela coordenação responsável.';
+        }
+        
+        resultStatusBadge.classList.add(badgeClass);
+        resultStatusBadge.textContent = data.status;
+        
+        // Populate text items
+        resultDescricao.textContent = data.descricao;
+        resultTipo.textContent = data.tipo;
+        resultLocal.textContent = data.local;
+        resultDataOcorrencia.textContent = formatarData(data.data_ocorrencia);
+        resultDataEnvio.textContent = formatarDataHora(data.data_envio);
+        
+        // Render explanation card
+        statusExplanation.className = `status-explanation-card ${explanationClass}`;
+        statusExplanation.innerHTML = explanationHtml;
+        
+        // Display Results
+        trackingResult.classList.remove('hidden');
     }
 
     // ==========================================
@@ -254,11 +339,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function validateForm() {
         let isValid = true;
         
-        if (!document.getElementById('descricao').value.trim()) {
-            setInputError(document.getElementById('descricao'));
+        const descEl = document.getElementById('descricao');
+        if (!descEl.value.trim()) {
+            setInputError(descEl);
+            isValid = false;
+        } else if (descEl.value.trim().length > 15) {
+            setInputError(descEl);
             isValid = false;
         } else {
-            clearInputError(document.getElementById('descricao'));
+            clearInputError(descEl);
         }
 
         if (!document.getElementById('tipo').value) {

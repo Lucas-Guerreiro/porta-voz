@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Detect environment (Vercel static fallback vs API mode)
+    const IS_VERCEL_STATIC = window.location.hostname.endsWith('.vercel.app') || window.location.hostname.includes('vercel') || window.location.search.includes('mock=true');
+    const eventChannel = window.BroadcastChannel ? new BroadcastChannel('porta-voz-events') : null;
+
     // State management
     let denuncias = [];
     let activeModalDenunciaId = null;
@@ -55,64 +59,110 @@ document.addEventListener('DOMContentLoaded', () => {
         setupDashboardCardClicks();
     }
 
-    // Fetch reports from API
+    // Fetch reports from API or LocalStorage
     async function fetchDenuncias() {
-        try {
-            const response = await fetch('/api/denuncias');
-            if (!response.ok) throw new Error('Erro ao obter dados do servidor');
-            denuncias = await response.json();
-            updateUI();
-        } catch (error) {
-            console.error(error);
-            tabelaCorpo.innerHTML = `<tr><td colspan="7" class="td-empty" style="color: var(--status-nova-text)">❌ Erro ao conectar com a API: ${error.message}</td></tr>`;
+        if (IS_VERCEL_STATIC) {
+            // LocalStorage Simulation Mode
+            try {
+                const localData = localStorage.getItem('denuncias');
+                denuncias = localData ? JSON.parse(localData) : [];
+                updateUI();
+            } catch (error) {
+                console.error(error);
+                tabelaCorpo.innerHTML = `<tr><td colspan="7" class="td-empty" style="color: var(--status-nova-text)">❌ Erro ao ler dados do localStorage: ${error.message}</td></tr>`;
+            }
+        } else {
+            // Standard API Mode
+            try {
+                const response = await fetch('/api/denuncias');
+                if (!response.ok) throw new Error('Erro ao obter dados do servidor');
+                denuncias = await response.json();
+                updateUI();
+            } catch (error) {
+                console.error(error);
+                tabelaCorpo.innerHTML = `<tr><td colspan="7" class="td-empty" style="color: var(--status-nova-text)">❌ Erro ao conectar com a API: ${error.message}</td></tr>`;
+            }
         }
     }
 
-    // Set up EventSource for SSE (Real-time updates)
+    // Set up EventSource for SSE (Real-time updates) or BroadcastChannel (Vercel)
     function setupSSE() {
-        const source = new EventSource('/api/sse');
-
-        source.onopen = () => {
+        if (IS_VERCEL_STATIC) {
+            // Local tab-to-tab sync using BroadcastChannel
             connectionDot.className = 'status-indicator-dot online';
-            connectionText.textContent = 'Conectado em tempo real';
-        };
-
-        source.onerror = (err) => {
-            console.error('SSE Error:', err);
-            connectionDot.className = 'status-indicator-dot offline';
-            connectionText.textContent = 'Desconectado';
-        };
-
-        source.onmessage = (event) => {
-            const eventData = JSON.parse(event.data);
+            connectionText.textContent = 'Simulador Local Ativo';
             
-            if (eventData.type === 'ping') {
-                return; // Connection check
-            }
-
-            if (eventData.type === 'nova_denuncia') {
-                const newDenuncia = eventData.data;
-                // Avoid duplicates just in case
-                if (!denuncias.some(d => d.id === newDenuncia.id)) {
-                    denuncias.unshift(newDenuncia); // Prepend to lists
-                    showToast(newDenuncia);
-                    updateUI();
-                }
-            } else if (eventData.type === 'status_atualizado') {
-                const updatedDenuncia = eventData.data;
-                const index = denuncias.findIndex(d => d.id === updatedDenuncia.id);
-                if (index !== -1) {
-                    denuncias[index].status = updatedDenuncia.status;
+            if (eventChannel) {
+                eventChannel.onmessage = (event) => {
+                    const eventData = event.data;
                     
-                    // If this specific report is open in the modal, update modal select
-                    if (activeModalDenunciaId === updatedDenuncia.id) {
-                        modalStatusSelect.value = updatedDenuncia.status;
+                    if (eventData.type === 'nova_denuncia') {
+                        const newDenuncia = eventData.data;
+                        // Avoid duplicates in memory, reload from localStorage
+                        const localData = localStorage.getItem('denuncias');
+                        denuncias = localData ? JSON.parse(localData) : [];
+                        
+                        showToast(newDenuncia);
+                        updateUI();
+                    } else if (eventData.type === 'status_atualizado') {
+                        const updatedDenuncia = eventData.data;
+                        const index = denuncias.findIndex(d => d.id === updatedDenuncia.id);
+                        if (index !== -1) {
+                            denuncias[index].status = updatedDenuncia.status;
+                            
+                            if (activeModalDenunciaId === updatedDenuncia.id) {
+                                modalStatusSelect.value = updatedDenuncia.status;
+                            }
+                            
+                            updateUI();
+                        }
                     }
-                    
-                    updateUI();
-                }
+                };
             }
-        };
+        } else {
+            // Standard Live API Mode
+            const source = new EventSource('/api/sse');
+
+            source.onopen = () => {
+                connectionDot.className = 'status-indicator-dot online';
+                connectionText.textContent = 'Conectado em tempo real';
+            };
+
+            source.onerror = (err) => {
+                console.error('SSE Error:', err);
+                connectionDot.className = 'status-indicator-dot offline';
+                connectionText.textContent = 'Desconectado';
+            };
+
+            source.onmessage = (event) => {
+                const eventData = JSON.parse(event.data);
+                
+                if (eventData.type === 'ping') {
+                    return; // Connection check
+                }
+
+                if (eventData.type === 'nova_denuncia') {
+                    const newDenuncia = eventData.data;
+                    if (!denuncias.some(d => d.id === newDenuncia.id)) {
+                        denuncias.unshift(newDenuncia);
+                        showToast(newDenuncia);
+                        updateUI();
+                    }
+                } else if (eventData.type === 'status_atualizado') {
+                    const updatedDenuncia = eventData.data;
+                    const index = denuncias.findIndex(d => d.id === updatedDenuncia.id);
+                    if (index !== -1) {
+                        denuncias[index].status = updatedDenuncia.status;
+                        
+                        if (activeModalDenunciaId === updatedDenuncia.id) {
+                            modalStatusSelect.value = updatedDenuncia.status;
+                        }
+                        
+                        updateUI();
+                    }
+                }
+            };
+        }
     }
 
     // Core UI rendering updates
@@ -236,7 +286,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById(cardId).classList.add('active-filter');
         
         applyFiltersAndRenderTable();
-        // Scroll to table smoothly
         document.querySelector('.filters-card').scrollIntoView({ behavior: 'smooth' });
     }
 
@@ -249,29 +298,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const anonimoVal = filterAnonimo.value; // 'true', 'false', or ''
         const dataVal = filterData.value; // YYYY-MM-DD
 
-        // Filter local state
         const filtered = denuncias.filter(d => {
-            // ID Filter
             if (idVal && !String(d.id).includes(idVal)) return false;
-            
-            // Tipo Filter
             if (tipoVal && d.tipo !== tipoVal) return false;
-            
-            // Local Filter
             if (localVal && d.local !== localVal) return false;
-            
-            // Status Filter
             if (statusVal && d.status !== statusVal) return false;
-            
-            // Anonymous Filter
             if (anonimoVal !== '') {
                 const isAnon = anonimoVal === 'true';
                 if (d.anonimo !== isAnon) return false;
             }
-            
-            // Occurrence Date Filter
             if (dataVal && d.data_ocorrencia !== dataVal) return false;
-
             return true;
         });
 
@@ -334,14 +370,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupModalListeners() {
         modalCloseBtn.addEventListener('click', closeModal);
         
-        // Close modal when clicking on the blurred background overlay
         detalhesModal.addEventListener('click', (e) => {
             if (e.target === detalhesModal) {
                 closeModal();
             }
         });
 
-        // ESC Key to close modal
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && !detalhesModal.classList.contains('hidden')) {
                 closeModal();
@@ -356,38 +390,60 @@ document.addEventListener('DOMContentLoaded', () => {
             modalStatusSelect.disabled = true;
             modalStatusLoader.style.display = 'inline-block';
 
-            try {
-                const response = await fetch(`/api/denuncias/${activeModalDenunciaId}/status`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ status: newStatus })
-                });
+            if (IS_VERCEL_STATIC) {
+                // LocalStorage Simulation Mode
+                setTimeout(() => {
+                    const index = denuncias.findIndex(d => d.id === activeModalDenunciaId);
+                    if (index !== -1) {
+                        denuncias[index].status = newStatus;
+                        localStorage.setItem('denuncias', JSON.stringify(denuncias));
+                        
+                        // Broadcast update to other tabs (like tracking tab)
+                        if (eventChannel) {
+                            eventChannel.postMessage({
+                                type: 'status_atualizado',
+                                data: denuncias[index]
+                            });
+                        }
+                        
+                        updateUI();
+                    }
+                    modalStatusSelect.disabled = false;
+                    modalStatusLoader.style.display = 'none';
+                }, 400); // Simulate network latency
+            } else {
+                // Standard API Mode
+                try {
+                    const response = await fetch(`/api/denuncias/${activeModalDenunciaId}/status`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ status: newStatus })
+                    });
 
-                const result = await response.json();
+                    const result = await response.json();
 
-                if (!response.ok) {
-                    throw new Error(result.error || 'Erro ao atualizar o status.');
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Erro ao atualizar o status.');
+                    }
+
+                    const index = denuncias.findIndex(d => d.id === activeModalDenunciaId);
+                    if (index !== -1) {
+                        denuncias[index].status = result.status;
+                        updateUI();
+                    }
+
+                } catch (error) {
+                    alert('Erro: ' + error.message);
+                    const originalItem = denuncias.find(d => d.id === activeModalDenunciaId);
+                    if (originalItem) {
+                        modalStatusSelect.value = originalItem.status;
+                    }
+                } finally {
+                    modalStatusSelect.disabled = false;
+                    modalStatusLoader.style.display = 'none';
                 }
-
-                // Update local state status immediately
-                const index = denuncias.findIndex(d => d.id === activeModalDenunciaId);
-                if (index !== -1) {
-                    denuncias[index].status = result.status;
-                    updateUI();
-                }
-
-            } catch (error) {
-                alert('Erro: ' + error.message);
-                // Revert select input
-                const originalItem = denuncias.find(d => d.id === activeModalDenunciaId);
-                if (originalItem) {
-                    modalStatusSelect.value = originalItem.status;
-                }
-            } finally {
-                modalStatusSelect.disabled = false;
-                modalStatusLoader.style.display = 'none';
             }
         });
     }
@@ -395,7 +451,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function openModal(item) {
         activeModalDenunciaId = item.id;
         
-        // Populate modal data
         modalId.textContent = `#${String(item.id).padStart(4, '0')}`;
         modalStatusSelect.value = item.status;
         modalDescricao.textContent = item.descricao;
@@ -403,11 +458,8 @@ document.addEventListener('DOMContentLoaded', () => {
         modalLocal.textContent = item.local;
         modalDataOcorrencia.textContent = formatarData(item.data_ocorrencia);
         modalDataEnvio.textContent = formatarDataHora(item.data_envio);
-        
-        // Additional Details
         modalDetalhes.textContent = item.detalhes ? item.detalhes : 'Nenhum detalhe adicional fornecido.';
 
-        // Privacy card formatting
         if (item.anonimo) {
             modalIdentificacao.className = 'info-value identificacao-card anonimo';
             modalIdentificacao.innerHTML = `
@@ -431,18 +483,17 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
-        // Show Modal
         detalhesModal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; // Lock background scroll
+        document.body.style.overflow = 'hidden';
     }
 
     function closeModal() {
         detalhesModal.classList.add('hidden');
-        document.body.style.overflow = 'auto'; // Re-enable background scroll
+        document.body.style.overflow = 'auto';
         activeModalDenunciaId = null;
     }
 
-    // Toast alerts logic (SSE triggering)
+    // Toast alerts logic
     function showToast(item) {
         const toast = document.createElement('div');
         toast.className = 'toast';
@@ -457,7 +508,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
         
-        // Click toast opens modal for this element directly
         toast.addEventListener('click', () => {
             openModal(item);
             toast.remove();
@@ -465,7 +515,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toastContainer.appendChild(toast);
 
-        // Auto remove toast after 5s
         setTimeout(() => {
             toast.classList.add('toast-closing');
             setTimeout(() => {
@@ -474,8 +523,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     }
 
-    // Helper functions: Date String Formatting
-    // Convert YYYY-MM-DD to DD/MM/YYYY
     function formatarData(dataSql) {
         if (!dataSql) return '-';
         const parts = dataSql.split('-');
@@ -483,11 +530,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
 
-    // Convert YYYY-MM-DD HH:MM:SS to DD/MM/YYYY às HH:MM
     function formatarDataHora(dataHoraSql) {
         if (!dataHoraSql) return '-';
-        
-        // Expecting "YYYY-MM-DD HH:MM:SS"
         const parts = dataHoraSql.split(' ');
         if (parts.length !== 2) return dataHoraSql;
         
@@ -495,7 +539,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const timeParts = parts[1].split(':');
         
         if (dateParts.length !== 3 || timeParts.length < 2) return dataHoraSql;
-        
         return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]} às ${timeParts[0]}:${timeParts[1]}`;
     }
 });

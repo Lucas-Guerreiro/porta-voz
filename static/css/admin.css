@@ -76,8 +76,11 @@ body {
     gap: 16px;
 }
 
-.logo-icon {
-    font-size: 28px;
+.logo-img-admin {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
 }
 
 .logo-title {

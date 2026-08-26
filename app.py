@@ -4,14 +4,14 @@ import json
 import queue
 import threading
 from datetime import datetime
-from flask import Flask, request, jsonify, Response, g
+from flask import Flask, request, jsonify, Response, g, session, redirect
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
+app.secret_key = os.environ.get('SECRET_KEY') or 'voz-segura-development-secret-key'
 
 # Cloud PostgreSQL Configuration
 DATABASE_URL = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # Replaces deprecated postgres:// prefix with postgresql:// for compatibility with psycopg2
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 DATABASE_SQLITE = 'denuncias.db'
@@ -94,8 +94,8 @@ def init_db():
                         contato TEXT,
                         status TEXT NOT NULL DEFAULT 'Nova',
                         data_envio TEXT NOT NULL
-                    )
-                ''')
+            )
+        ''')
                 db.commit()
             else:
                 if not os.path.exists(DATABASE_SQLITE):
@@ -119,14 +119,48 @@ def init_db():
         except Exception as e:
             app.logger.error(f"Erro ao inicializar o banco de dados: {e}")
 
+# Global Request Interceptor (Auth & DB Lazy Init)
 @app.before_request
-def initialize_on_first_request():
+def handle_before_request():
+    # 1. DB Lazy Initialization
     global db_initialized
     if not db_initialized:
         with db_init_lock:
             if not db_initialized:
                 init_db()
                 db_initialized = True
+
+    # 2. Authentication Protection
+    # Exempt files served from /static/ and auth endpoints
+    if request.path.startswith('/static/') or request.path in ['/login', '/api/login', '/api/status']:
+        return
+
+    # Check session
+    if 'user' not in session:
+        if request.path.startswith('/api/'):
+            return jsonify({"error": "Não autenticado"}), 401
+        return redirect('/login')
+
+    # Role-based Authorization (Admin only endpoints)
+    role = session.get('role')
+    
+    # Protect admin dashboard file
+    if request.path == '/admin' and role != 'admin':
+        return redirect('/login')
+
+    # Protect admin API endpoints
+    if request.path.startswith('/api/'):
+        # GET /api/denuncias (list all reports) - Admin only
+        if request.path == '/api/denuncias' and request.method == 'GET' and role != 'admin':
+            return jsonify({"error": "Acesso negado. Apenas administradores."}), 403
+            
+        # GET/PATCH /api/denuncias/<id> (details/status) - Admin only (except /publica endpoint)
+        if request.path.startswith('/api/denuncias/') and not request.path.endswith('/publica') and role != 'admin':
+            return jsonify({"error": "Acesso negado. Apenas administradores."}), 403
+            
+        # GET /api/sse (realtime updates stream) - Admin only
+        if request.path == '/api/sse' and role != 'admin':
+            return jsonify({"error": "Acesso negado. Apenas administradores."}), 403
 
 # Route definitions for Static Files
 @app.route('/')
@@ -136,6 +170,46 @@ def route_index():
 @app.route('/admin')
 def route_admin():
     return app.send_static_file('admin.html')
+
+@app.route('/login')
+def route_login():
+    return app.send_static_file('login.html')
+
+# Authentication API Endpoints
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        if not data or 'username' not in data or 'password' not in data:
+            return jsonify({"error": "Preencha todos os campos"}), 400
+            
+        username = data['username'].strip().lower()
+        password = data['password']
+        
+        # Test Credentials
+        if username == 'admin' and password == 'admin123':
+            session['user'] = 'admin'
+            session['role'] = 'admin'
+            return jsonify({"message": "Login realizado com sucesso", "role": "admin"}), 200
+        elif username == 'aluno' and password == 'aluno123':
+            session['user'] = 'aluno'
+            session['role'] = 'aluno'
+            return jsonify({"message": "Login realizado com sucesso", "role": "aluno"}), 200
+        else:
+            return jsonify({"error": "Usuário ou senha incorretos"}), 401
+    except Exception as e:
+        return jsonify({"error": f"Erro no login: {str(e)}"}), 500
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return jsonify({"message": "Logout realizado com sucesso"}), 200
+
+@app.route('/api/me', methods=['GET'])
+def get_me():
+    if 'user' not in session:
+        return jsonify({"error": "Não autenticado"}), 401
+    return jsonify({"user": session['user'], "role": session['role']}), 200
 
 # API Endpoints
 @app.route('/api/denuncias', methods=['POST'])
@@ -192,7 +266,6 @@ def create_denuncia():
         p = get_placeholder()
         
         if DATABASE_URL:
-            # Postgres INSERT returning the SERIAL generated ID
             cursor.execute(f'''
                 INSERT INTO denuncias (descricao, tipo, data_ocorrencia, local, detalhes, anonimo, nome, contato, status, data_envio)
                 VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, 'Nova', {p})
@@ -200,7 +273,6 @@ def create_denuncia():
             ''', (descricao, data['tipo'], data_ocorrencia, data['local'], detalhes, anonimo, nome, contato, data_envio))
             denuncia_id = cursor.fetchone()[0]
         else:
-            # SQLite INSERT
             cursor.execute(f'''
                 INSERT INTO denuncias (descricao, tipo, data_ocorrencia, local, detalhes, anonimo, nome, contato, status, data_envio)
                 VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, 'Nova', {p})
@@ -209,11 +281,9 @@ def create_denuncia():
             
         db.commit()
         
-        # Retrieve the newly created row using DB-agnostic helper
+        # Retrieve the newly created row
         cursor.execute(f'SELECT * FROM denuncias WHERE id = {p}', (denuncia_id,))
         denuncia_dict = fetch_one_as_dict(cursor)
-        
-        # Convert numeric boolean
         denuncia_dict['anonimo'] = bool(denuncia_dict['anonimo'])
         
         # Broadcast via SSE
@@ -259,7 +329,6 @@ def get_denuncias():
             query += f' AND data_ocorrencia = {p}'
             params.append(filter_data)
             
-        # Order by newest submission date
         query += ' ORDER BY data_envio DESC'
         
         db = get_db()
@@ -302,7 +371,6 @@ def get_public_denuncia_by_id(denuncia_id):
         cursor = db.cursor()
         p = get_placeholder()
         
-        # Safe projection excludes reporter identity details
         cursor.execute(f'SELECT id, tipo, local, data_ocorrencia, data_envio, status, descricao FROM denuncias WHERE id = {p}', (denuncia_id,))
         row = fetch_one_as_dict(cursor)
         
@@ -376,8 +444,6 @@ def sse_endpoint():
                     sse_listeners.remove(q)
                     
     return Response(event_generator(), mimetype='text/event-stream')
-
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

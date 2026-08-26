@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const tabelaCorpo = document.getElementById('tabela-corpo');
     const tableStatsCount = document.getElementById('table-stats-count');
+    const btnLogout = document.getElementById('btn-logout');
     
     const toastContainer = document.getElementById('toast-container');
     
@@ -53,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function init() {
         await checkDatabaseMode();
+        setupLogout();
         await fetchDenuncias();
         setupSSE();
         setupFilterListeners();
@@ -78,8 +80,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (e) {
                 console.error("ℹ️ VOZ SEGURA: Erro ao detectar banco de dados no admin:", e);
-                // Keep static simulation
             }
+        }
+    }
+
+    // Set up logout button handler
+    function setupLogout() {
+        if (btnLogout) {
+            btnLogout.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/logout', { method: 'POST' });
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    } else {
+                        window.location.href = '/login';
+                    }
+                } catch (error) {
+                    window.location.href = '/login';
+                }
+            });
         }
     }
 
@@ -99,6 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Standard API Mode
             try {
                 const response = await fetch('/api/denuncias');
+                
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
                 if (!response.ok) throw new Error('Erro ao obter dados do servidor');
                 denuncias = await response.json();
                 updateUI();
@@ -153,6 +178,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             source.onerror = (err) => {
                 console.error('SSE Error:', err);
+                // Redirect on authentication loss
+                fetch('/api/me').then(res => {
+                    if (res.status === 401) window.location.href = '/login';
+                });
                 connectionDot.className = 'status-indicator-dot offline';
                 connectionText.textContent = 'Desconectado';
             };
@@ -239,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderChartBars(sortedData, container, defaultEmptyLabel) {
         if (sortedData.length === 0) {
-            container.innerHTML = `<div class="chart-empty">Nenhum data registrado para exibir gráfico.</div>`;
+            container.innerHTML = `<div class="chart-empty">Nenhum dado registrado para exibir gráfico.</div>`;
             return;
         }
 
@@ -439,6 +468,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         },
                         body: JSON.stringify({ status: newStatus })
                     });
+
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
 
                     const result = await response.json();
 

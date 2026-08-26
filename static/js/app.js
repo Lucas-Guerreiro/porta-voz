@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnNovo = document.getElementById('btn-novo');
     const protocoloId = document.getElementById('protocolo-id');
     const btnAcompanharNovo = document.getElementById('btn-acompanhar-novo');
+    const btnLogout = document.getElementById('btn-logout');
 
     // 2. DOM Elements - Tabs Navigation
     const tabEnviar = document.getElementById('tab-enviar');
@@ -52,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = await response.json();
                     console.log("ℹ️ VOZ SEGURA: Resposta do servidor:", data);
                     if (data.database === 'postgres') {
-                        // Vercel Serverless has a Postgres database connected! Switch to API mode
                         IS_VERCEL_STATIC = false;
                         console.log("🟢 VOZ SEGURA: Banco PostgreSQL detectado no Vercel. Operando em Modo API.");
                     } else {
@@ -68,6 +68,24 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             console.log("🟢 VOZ SEGURA: Operando em Modo API local/Render.");
         }
+    }
+
+    // ==========================================
+    // LOGOUT LOGIC
+    // ==========================================
+    if (btnLogout) {
+        btnLogout.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/logout', { method: 'POST' });
+                if (response.ok) {
+                    window.location.href = '/login';
+                } else {
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        });
     }
 
     // ==========================================
@@ -184,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } finally {
                     setLoading(btnEnviar, false);
                 }
-            }, 800); // Simulate network latency
+            }, 800);
         } else {
             // Standard API Mode
             try {
@@ -193,6 +211,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
 
                 const result = await response.json();
 
@@ -286,11 +309,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 } finally {
                     setLoading(btnConsultar, false);
                 }
-            }, 400); // Simulate network latency
+            }, 400);
         } else {
             // Standard API Mode
             try {
                 const response = await fetch(`/api/denuncias/${id}/publica`);
+                
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
                 const data = await response.json();
 
                 if (!response.ok) {

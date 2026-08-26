@@ -17,6 +17,7 @@ class PortaVozTestCase(unittest.TestCase):
         app_module.DATABASE_SQLITE = self.db_path
         
         app.config['TESTING'] = True
+        app.config['SECRET_KEY'] = 'test-secret-key'
         self.client = app.test_client()
         
         # Initialize schema
@@ -30,6 +31,20 @@ class PortaVozTestCase(unittest.TestCase):
         # Restore original database path variable
         import app as app_module
         app_module.DATABASE_SQLITE = self.original_db_path
+
+    def login_as(self, username, password):
+        """Helper to log in during tests."""
+        payload = {
+            "username": username,
+            "password": password
+        }
+        return self.client.post('/api/login', 
+                                 data=json.dumps(payload),
+                                 content_type='application/json')
+
+    def logout(self):
+        """Helper to log out during tests."""
+        return self.client.post('/api/logout')
 
     def test_database_initialization(self):
         """Test that the sqlite3 database initializes with correct table structure."""
@@ -57,9 +72,12 @@ class PortaVozTestCase(unittest.TestCase):
         conn.close()
 
     def test_create_anonymous_denuncia(self):
-        """Test sending a valid anonymous report with short description."""
+        """Test sending a valid anonymous report after logging in."""
+        # Must login first
+        self.login_as('aluno', 'aluno123')
+        
         payload = {
-            "descricao": "Bullying pátio",  # 14 chars (under 15 limit)
+            "descricao": "Bullying pátio",
             "tipo": "Bullying",
             "data_ocorrencia": "2026-08-19",
             "local": "Pátio",
@@ -88,8 +106,11 @@ class PortaVozTestCase(unittest.TestCase):
 
     def test_create_identified_denuncia(self):
         """Test sending a valid identified report."""
+        # Must login first
+        self.login_as('aluno', 'aluno123')
+        
         payload = {
-            "descricao": "Agressão verbal",  # 15 chars
+            "descricao": "Agressão verbal",
             "tipo": "Agressão verbal",
             "data_ocorrencia": "2026-08-18",
             "local": "Corredor",
@@ -112,6 +133,9 @@ class PortaVozTestCase(unittest.TestCase):
 
     def test_create_denuncia_validation_errors(self):
         """Test validation rules for missing fields and bad choices."""
+        # Must login first
+        self.login_as('aluno', 'aluno123')
+        
         # 1. Missing description
         payload = {
             "tipo": "Bullying",
@@ -143,7 +167,6 @@ class PortaVozTestCase(unittest.TestCase):
             "local": "Corredor",
             "anonimo": False,
             "nome": "Carlos"
-            # Missing contact
         }
         response = self.client.post('/api/denuncias', data=json.dumps(payload), content_type='application/json')
         self.assertEqual(response.status_code, 400)
@@ -151,7 +174,7 @@ class PortaVozTestCase(unittest.TestCase):
 
         # 4. Description too long (over 15 characters)
         payload = {
-            "descricao": "Texto com mais de quinze caracteres de comprimento.", # 51 chars
+            "descricao": "Texto com mais de quinze caracteres de comprimento.",
             "tipo": "Bullying",
             "data_ocorrencia": "2026-08-19",
             "local": "Pátio",
@@ -163,6 +186,9 @@ class PortaVozTestCase(unittest.TestCase):
 
     def test_get_denuncias_and_filtering(self):
         """Test retrieving all reports and verifying filter parameters."""
+        # 1. Login as Aluno to submit reports
+        self.login_as('aluno', 'aluno123')
+        
         d1 = {
             "descricao": "Bullying",
             "tipo": "Bullying",
@@ -182,6 +208,16 @@ class PortaVozTestCase(unittest.TestCase):
         
         self.client.post('/api/denuncias', data=json.dumps(d1), content_type='application/json')
         self.client.post('/api/denuncias', data=json.dumps(d2), content_type='application/json')
+
+        # Logout Aluno and login as Admin to retrieve reports
+        self.logout()
+        
+        # Unauthenticated request should fail (401)
+        res_fail = self.client.get('/api/denuncias')
+        self.assertEqual(res_fail.status_code, 401)
+        
+        # Log in as Admin
+        self.login_as('admin', 'admin123')
 
         # Get all
         response = self.client.get('/api/denuncias')
@@ -209,6 +245,8 @@ class PortaVozTestCase(unittest.TestCase):
 
     def test_update_status(self):
         """Test status transitions."""
+        # Submit report as Aluno
+        self.login_as('aluno', 'aluno123')
         d = {
             "descricao": "Bullying",
             "tipo": "Bullying",
@@ -218,6 +256,10 @@ class PortaVozTestCase(unittest.TestCase):
         }
         res = self.client.post('/api/denuncias', data=json.dumps(d), content_type='application/json')
         inserted_id = json.loads(res.data)["id"]
+        self.logout()
+
+        # Login as Admin to fetch and update status
+        self.login_as('admin', 'admin123')
 
         # Initial status check
         res = self.client.get(f'/api/denuncias/{inserted_id}')
@@ -242,6 +284,8 @@ class PortaVozTestCase(unittest.TestCase):
 
     def test_get_public_denuncia_by_id(self):
         """Test retrieving a report through the secure public tracking route."""
+        # Submit report as Aluno
+        self.login_as('aluno', 'aluno123')
         d = {
             "descricao": "Bullying",
             "tipo": "Bullying",
@@ -255,7 +299,7 @@ class PortaVozTestCase(unittest.TestCase):
         res = self.client.post('/api/denuncias', data=json.dumps(d), content_type='application/json')
         inserted_id = json.loads(res.data)["id"]
 
-        # Call public safe endpoint
+        # Call public safe endpoint (accessible by Aluno)
         response = self.client.get(f'/api/denuncias/{inserted_id}/publica')
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)

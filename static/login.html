@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VOZ SEGURA — Login</title>
+    <link rel="stylesheet" href="/static/css/login.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <!-- Header -->
+            <div class="login-header">
+                <img src="/static/img/logo.jpg" alt="Logo Voz Segura" class="login-logo">
+                <h1 class="login-title">VOZ SEGURA</h1>
+                <p class="login-subtitle">Faça login para registrar ocorrências ou acessar o painel de administração.</p>
+            </div>
+
+            <!-- Error Banner -->
+            <div id="error-alert" class="error-alert hidden">
+                <span>⚠️</span>
+                <span id="error-message">Usuário ou senha incorretos.</span>
+            </div>
+
+            <!-- Login Form -->
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username" class="form-label">Usuário</label>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Digite seu usuário" required autocomplete="username">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label for="password" class="form-label">Senha</label>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Digite sua senha" required autocomplete="current-password">
+                </div>
+
+                <button type="submit" id="btn-login" class="btn-submit">
+                    <span class="btn-text">Entrar</span>
+                    <div class="btn-spinner"></div>
+                </button>
+            </form>
+
+            <!-- Access Credentials Helper -->
+            <div class="credentials-hint">
+                <p><strong>Acesso Rápido para Testes:</strong></p>
+                <p>• Aluno: <strong>aluno</strong> / <strong>aluno123</strong></p>
+                <p>• Admin: <strong>admin</strong> / <strong>admin123</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/login.js"></script>
+</body>
+</html>

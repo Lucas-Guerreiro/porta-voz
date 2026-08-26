@@ -47,20 +47,22 @@ document.addEventListener('DOMContentLoaded', () => {
     async function checkDatabaseMode() {
         if (IS_VERCEL_STATIC) {
             try {
-                const response = await fetch('/api/status');
+                const response = await fetch('/api/status?_t=' + Date.now());
                 if (response.ok) {
                     const data = await response.json();
+                    console.log("ℹ️ VOZ SEGURA: Resposta do servidor:", data);
                     if (data.database === 'postgres') {
                         // Vercel Serverless has a Postgres database connected! Switch to API mode
                         IS_VERCEL_STATIC = false;
                         console.log("🟢 VOZ SEGURA: Banco PostgreSQL detectado no Vercel. Operando em Modo API.");
                     } else {
-                        console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação).");
+                        console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação). Motivo: Banco PostgreSQL não configurado no Vercel.");
                     }
                 } else {
-                    console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação).");
+                    console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação). Motivo: Resposta da API inválida.");
                 }
             } catch (e) {
+                console.error("ℹ️ VOZ SEGURA: Erro ao detectar banco de dados:", e);
                 console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação).");
             }
         } else {

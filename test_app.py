@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 import sqlite3
-from app import app, init_db, DATABASE
+from app import app, init_db, DATABASE_SQLITE
 
 class PortaVozTestCase(unittest.TestCase):
     def setUp(self):
@@ -11,10 +11,10 @@ class PortaVozTestCase(unittest.TestCase):
         self.db_fd, self.db_path = tempfile.mkstemp()
         app.config['DATABASE'] = self.db_path
         
-        # Override the global DATABASE variable inside app.py
+        # Override the global DATABASE_SQLITE variable inside app.py
         import app as app_module
-        self.original_db_path = app_module.DATABASE
-        app_module.DATABASE = self.db_path
+        self.original_db_path = app_module.DATABASE_SQLITE
+        app_module.DATABASE_SQLITE = self.db_path
         
         app.config['TESTING'] = True
         self.client = app.test_client()
@@ -29,7 +29,7 @@ class PortaVozTestCase(unittest.TestCase):
         
         # Restore original database path variable
         import app as app_module
-        app_module.DATABASE = self.original_db_path
+        app_module.DATABASE_SQLITE = self.original_db_path
 
     def test_database_initialization(self):
         """Test that the sqlite3 database initializes with correct table structure."""

@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Detect environment (Vercel static fallback vs API mode)
-    const IS_VERCEL_STATIC = window.location.hostname.endsWith('.vercel.app') || window.location.hostname.includes('vercel') || window.location.search.includes('mock=true');
+    let IS_VERCEL_STATIC = window.location.hostname.endsWith('.vercel.app') || window.location.hostname.includes('vercel') || window.location.search.includes('mock=true');
     const eventChannel = window.BroadcastChannel ? new BroadcastChannel('porta-voz-events') : null;
 
     // 1. DOM Elements - Form & General
@@ -41,9 +41,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('data_ocorrencia').setAttribute('max', today);
 
-    // Show warning console log if in Vercel mode
-    if (IS_VERCEL_STATIC) {
-        console.log("ℹ️ PORTA VOZ: Modo Vercel estático detectado. Usando localStorage e BroadcastChannel.");
+    // Dynamic Database mode detection
+    checkDatabaseMode();
+
+    async function checkDatabaseMode() {
+        if (IS_VERCEL_STATIC) {
+            try {
+                const response = await fetch('/api/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.database === 'postgres') {
+                        // Vercel Serverless has a Postgres database connected! Switch to API mode
+                        IS_VERCEL_STATIC = false;
+                        console.log("🟢 VOZ SEGURA: Banco PostgreSQL detectado no Vercel. Operando em Modo API.");
+                    } else {
+                        console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação).");
+                    }
+                } else {
+                    console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação).");
+                }
+            } catch (e) {
+                console.log("ℹ️ VOZ SEGURA: Rodando no Vercel (Modo LocalStorage/Simulação).");
+            }
+        } else {
+            console.log("🟢 VOZ SEGURA: Operando em Modo API local/Render.");
+        }
     }
 
     // ==========================================

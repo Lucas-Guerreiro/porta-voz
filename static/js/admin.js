@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Detect environment (Vercel static fallback vs API mode)
-    const IS_VERCEL_STATIC = window.location.hostname.endsWith('.vercel.app') || window.location.hostname.includes('vercel') || window.location.search.includes('mock=true');
+    let IS_VERCEL_STATIC = window.location.hostname.endsWith('.vercel.app') || window.location.hostname.includes('vercel') || window.location.search.includes('mock=true');
     const eventChannel = window.BroadcastChannel ? new BroadcastChannel('porta-voz-events') : null;
 
     // State management
@@ -52,11 +52,29 @@ document.addEventListener('DOMContentLoaded', () => {
     init();
 
     async function init() {
+        await checkDatabaseMode();
         await fetchDenuncias();
         setupSSE();
         setupFilterListeners();
         setupModalListeners();
         setupDashboardCardClicks();
+    }
+
+    async function checkDatabaseMode() {
+        if (IS_VERCEL_STATIC) {
+            try {
+                const response = await fetch('/api/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.database === 'postgres') {
+                        IS_VERCEL_STATIC = false;
+                        console.log("🟢 VOZ SEGURA: Banco PostgreSQL detectado no Vercel. Operando em Modo API.");
+                    }
+                }
+            } catch (e) {
+                // Keep static simulation
+            }
+        }
     }
 
     // Fetch reports from API or LocalStorage
@@ -98,7 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     if (eventData.type === 'nova_denuncia') {
                         const newDenuncia = eventData.data;
-                        // Avoid duplicates in memory, reload from localStorage
                         const localData = localStorage.getItem('denuncias');
                         denuncias = localData ? JSON.parse(localData) : [];
                         
@@ -197,7 +214,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Draw customized CSS-based Bar Charts dynamically
     function renderCharts() {
-        // 1. Tipo Occurrence Chart
         const tipoCounts = {};
         denuncias.forEach(d => {
             tipoCounts[d.tipo] = (tipoCounts[d.tipo] || 0) + 1;
@@ -206,7 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const sortedTipos = Object.entries(tipoCounts).sort((a, b) => b[1] - a[1]);
         renderChartBars(sortedTipos, chartTiposContainer, 'Bullying');
 
-        // 2. Local Chart
         const localCounts = {};
         denuncias.forEach(d => {
             localCounts[d.local] = (localCounts[d.local] || 0) + 1;
@@ -216,14 +231,13 @@ document.addEventListener('DOMContentLoaded', () => {
         renderChartBars(sortedLocais, chartLocaisContainer, 'Sala de aula');
     }
 
-    // Sub-helper to draw CSS bar components inside parent containers
     function renderChartBars(sortedData, container, defaultEmptyLabel) {
         if (sortedData.length === 0) {
-            container.innerHTML = `<div class="chart-empty">Nenhum dado registrado para exibir gráfico.</div>`;
+            container.innerHTML = `<div class="chart-empty">Nenhum data registrado para exibir gráfico.</div>`;
             return;
         }
 
-        const maxVal = sortedData[0][1]; // Highest count for scale percentage
+        const maxVal = sortedData[0][1];
         
         let html = '';
         sortedData.slice(0, 5).forEach(([name, count]) => {
@@ -259,7 +273,6 @@ document.addEventListener('DOMContentLoaded', () => {
             filterAnonimo.value = '';
             filterData.value = '';
             
-            // Remove active classes on Dashboard cards
             document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active-filter'));
 
             applyFiltersAndRenderTable();
@@ -295,8 +308,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const tipoVal = filterTipo.value;
         const localVal = filterLocal.value;
         const statusVal = filterStatus.value;
-        const anonimoVal = filterAnonimo.value; // 'true', 'false', or ''
-        const dataVal = filterData.value; // YYYY-MM-DD
+        const anonimoVal = filterAnonimo.value;
+        const dataVal = filterData.value;
 
         const filtered = denuncias.filter(d => {
             if (idVal && !String(d.id).includes(idVal)) return false;
@@ -398,7 +411,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         denuncias[index].status = newStatus;
                         localStorage.setItem('denuncias', JSON.stringify(denuncias));
                         
-                        // Broadcast update to other tabs (like tracking tab)
                         if (eventChannel) {
                             eventChannel.postMessage({
                                 type: 'status_atualizado',
@@ -410,7 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     modalStatusSelect.disabled = false;
                     modalStatusLoader.style.display = 'none';
-                }, 400); // Simulate network latency
+                }, 400);
             } else {
                 // Standard API Mode
                 try {

@@ -7,7 +7,14 @@ from datetime import datetime
 from flask import Flask, request, jsonify, Response, g
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
-DATABASE = 'denuncias.db'
+
+# Cloud PostgreSQL Configuration
+DATABASE_URL = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    # Replaces deprecated postgres:// prefix with postgresql:// for compatibility with psycopg2
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+DATABASE_SQLITE = 'denuncias.db'
 
 # SSE Thread-safe broadcasting mechanism
 sse_listeners = []
@@ -27,12 +34,16 @@ def announce_sse_event(event_type, data):
             except Exception:
                 sse_listeners.remove(q)
 
-# SQLite Connection helpers
+# Dynamic DB Connection helpers
 def get_db():
     db = getattr(g, '_database', None)
     if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
-        db.row_factory = sqlite3.Row
+        if DATABASE_URL:
+            import psycopg2
+            db = g._database = psycopg2.connect(DATABASE_URL)
+        else:
+            db = g._database = sqlite3.connect(DATABASE_SQLITE)
+            db.row_factory = sqlite3.Row
     return db
 
 @app.teardown_appcontext
@@ -41,30 +52,66 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
+# Database-agnostic Query Helpers
+def get_placeholder():
+    """Returns %s for PostgreSQL and ? for SQLite."""
+    return '%s' if DATABASE_URL else '?'
+
+def fetch_all_as_dict(cursor):
+    """Maps cursor rows to list of dictionaries."""
+    rows = cursor.fetchall()
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in rows]
+
+def fetch_one_as_dict(cursor):
+    """Maps a single cursor row to a dictionary."""
+    row = cursor.fetchone()
+    if not row:
+        return None
+    columns = [col[0] for col in cursor.description]
+    return dict(zip(columns, row))
+
 def init_db():
-    """Initializes the SQLite database with the required schema."""
-    if not os.path.exists(DATABASE):
-        # Create database file
-        open(DATABASE, 'w').close()
-        
+    """Initializes the database table with standard SQLite or PostgreSQL schemas."""
     with app.app_context():
         db = get_db()
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS denuncias (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                descricao TEXT NOT NULL,
-                tipo TEXT NOT NULL,
-                data_ocorrencia TEXT NOT NULL,
-                local TEXT NOT NULL,
-                detalhes TEXT,
-                anonimo INTEGER NOT NULL,
-                nome TEXT,
-                contato TEXT,
-                status TEXT NOT NULL DEFAULT 'Nova',
-                data_envio TEXT NOT NULL
-            )
-        ''')
-        db.commit()
+        cursor = db.cursor()
+        if DATABASE_URL:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS denuncias (
+                    id SERIAL PRIMARY KEY,
+                    descricao TEXT NOT NULL,
+                    tipo TEXT NOT NULL,
+                    data_ocorrencia TEXT NOT NULL,
+                    local TEXT NOT NULL,
+                    detalhes TEXT,
+                    anonimo INTEGER NOT NULL,
+                    nome TEXT,
+                    contato TEXT,
+                    status TEXT NOT NULL DEFAULT 'Nova',
+                    data_envio TEXT NOT NULL
+                )
+            ''')
+            db.commit()
+        else:
+            if not os.path.exists(DATABASE_SQLITE):
+                open(DATABASE_SQLITE, 'w').close()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS denuncias (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    descricao TEXT NOT NULL,
+                    tipo TEXT NOT NULL,
+                    data_ocorrencia TEXT NOT NULL,
+                    local TEXT NOT NULL,
+                    detalhes TEXT,
+                    anonimo INTEGER NOT NULL,
+                    nome TEXT,
+                    contato TEXT,
+                    status TEXT NOT NULL DEFAULT 'Nova',
+                    data_envio TEXT NOT NULL
+                )
+            ''')
+            db.commit()
 
 # Route definitions for Static Files
 @app.route('/')
@@ -127,19 +174,30 @@ def create_denuncia():
         # Insert into DB
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('''
-            INSERT INTO denuncias (descricao, tipo, data_ocorrencia, local, detalhes, anonimo, nome, contato, status, data_envio)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Nova', ?)
-        ''', (descricao, data['tipo'], data_ocorrencia, data['local'], detalhes, anonimo, nome, contato, data_envio))
+        p = get_placeholder()
+        
+        if DATABASE_URL:
+            # Postgres INSERT returning the SERIAL generated ID
+            cursor.execute(f'''
+                INSERT INTO denuncias (descricao, tipo, data_ocorrencia, local, detalhes, anonimo, nome, contato, status, data_envio)
+                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, 'Nova', {p})
+                RETURNING id
+            ''', (descricao, data['tipo'], data_ocorrencia, data['local'], detalhes, anonimo, nome, contato, data_envio))
+            denuncia_id = cursor.fetchone()[0]
+        else:
+            # SQLite INSERT
+            cursor.execute(f'''
+                INSERT INTO denuncias (descricao, tipo, data_ocorrencia, local, detalhes, anonimo, nome, contato, status, data_envio)
+                VALUES ({p}, {p}, {p}, {p}, {p}, {p}, {p}, {p}, 'Nova', {p})
+            ''', (descricao, data['tipo'], data_ocorrencia, data['local'], detalhes, anonimo, nome, contato, data_envio))
+            denuncia_id = cursor.lastrowid
+            
         db.commit()
         
-        denuncia_id = cursor.lastrowid
+        # Retrieve the newly created row using DB-agnostic helper
+        cursor.execute(f'SELECT * FROM denuncias WHERE id = {p}', (denuncia_id,))
+        denuncia_dict = fetch_one_as_dict(cursor)
         
-        # Retrieve the newly created denuncia to broadcast and return
-        cursor.execute('SELECT * FROM denuncias WHERE id = ?', (denuncia_id,))
-        row = cursor.fetchone()
-        
-        denuncia_dict = dict(row)
         # Convert numeric boolean
         denuncia_dict['anonimo'] = bool(denuncia_dict['anonimo'])
         
@@ -159,41 +217,43 @@ def get_denuncias():
         filter_tipo = request.args.get('tipo')
         filter_local = request.args.get('local')
         filter_status = request.args.get('status')
-        filter_anonimo = request.args.get('anonimo') # 'true'/'false' or '1'/'0'
-        filter_data = request.args.get('data') # YYYY-MM-DD
+        filter_anonimo = request.args.get('anonimo')
+        filter_data = request.args.get('data')
         
         query = 'SELECT * FROM denuncias WHERE 1=1'
         params = []
+        p = get_placeholder()
         
         if filter_id:
-            query += ' AND id = ?'
-            params.append(filter_id)
+            query += f' AND id = {p}'
+            params.append(int(filter_id) if filter_id.isdigit() else 0)
         if filter_tipo:
-            query += ' AND tipo = ?'
+            query += f' AND tipo = {p}'
             params.append(filter_tipo)
         if filter_local:
-            query += ' AND local = ?'
+            query += f' AND local = {p}'
             params.append(filter_local)
         if filter_status:
-            query += ' AND status = ?'
+            query += f' AND status = {p}'
             params.append(filter_status)
         if filter_anonimo is not None:
             anon_val = 1 if filter_anonimo.lower() in ['true', '1'] else 0
-            query += ' AND anonimo = ?'
+            query += f' AND anonimo = {p}'
             params.append(anon_val)
         if filter_data:
-            query += ' AND data_ocorrencia = ?'
+            query += f' AND data_ocorrencia = {p}'
             params.append(filter_data)
             
         # Order by newest submission date
         query += ' ORDER BY data_envio DESC'
         
         db = get_db()
-        rows = db.execute(query, params).fetchall()
+        cursor = db.cursor()
+        cursor.execute(query, params)
+        rows = fetch_all_as_dict(cursor)
         
         result = []
-        for r in rows:
-            d = dict(r)
+        for d in rows:
             d['anonimo'] = bool(d['anonimo'])
             result.append(d)
             
@@ -206,14 +266,16 @@ def get_denuncias():
 def get_denuncia_by_id(denuncia_id):
     try:
         db = get_db()
-        row = db.execute('SELECT * FROM denuncias WHERE id = ?', (denuncia_id,)).fetchone()
+        cursor = db.cursor()
+        p = get_placeholder()
+        cursor.execute(f'SELECT * FROM denuncias WHERE id = {p}', (denuncia_id,))
+        row = fetch_one_as_dict(cursor)
         
         if not row:
             return jsonify({"error": f"Denúncia com ID {denuncia_id} não encontrada"}), 404
             
-        denuncia_dict = dict(row)
-        denuncia_dict['anonimo'] = bool(denuncia_dict['anonimo'])
-        return jsonify(denuncia_dict), 200
+        row['anonimo'] = bool(row['anonimo'])
+        return jsonify(row), 200
         
     except Exception as e:
         return jsonify({"error": f"Erro interno no servidor: {str(e)}"}), 500
@@ -222,18 +284,20 @@ def get_denuncia_by_id(denuncia_id):
 def get_public_denuncia_by_id(denuncia_id):
     try:
         db = get_db()
-        # Safe projection: excludes name, contact and detail descriptions
-        row = db.execute('SELECT id, tipo, local, data_ocorrencia, data_envio, status, descricao FROM denuncias WHERE id = ?', (denuncia_id,)).fetchone()
+        cursor = db.cursor()
+        p = get_placeholder()
+        
+        # Safe projection excludes reporter identity details
+        cursor.execute(f'SELECT id, tipo, local, data_ocorrencia, data_envio, status, descricao FROM denuncias WHERE id = {p}', (denuncia_id,))
+        row = fetch_one_as_dict(cursor)
         
         if not row:
             return jsonify({"error": f"Denúncia com protocolo #{denuncia_id:04d} não encontrada"}), 404
             
-        denuncia_dict = dict(row)
-        return jsonify(denuncia_dict), 200
+        return jsonify(row), 200
         
     except Exception as e:
         return jsonify({"error": f"Erro interno no servidor: {str(e)}"}), 500
-
 
 @app.route('/api/denuncias/<int:denuncia_id>/status', methods=['PATCH'])
 def update_denuncia_status(denuncia_id):
@@ -249,27 +313,33 @@ def update_denuncia_status(denuncia_id):
             
         db = get_db()
         cursor = db.cursor()
-        cursor.execute('UPDATE denuncias SET status = ? WHERE id = ?', (status, denuncia_id))
-        
-        if cursor.rowcount == 0:
-            return jsonify({"error": f"Denúncia com ID {denuncia_id} não encontrada"}), 404
-            
+        p = get_placeholder()
+        cursor.execute(f'UPDATE denuncias SET status = {p} WHERE id = {p}', (status, denuncia_id))
         db.commit()
         
         # Fetch updated record
-        cursor.execute('SELECT * FROM denuncias WHERE id = ?', (denuncia_id,))
-        row = cursor.fetchone()
+        cursor.execute(f'SELECT * FROM denuncias WHERE id = {p}', (denuncia_id,))
+        row = fetch_one_as_dict(cursor)
         
-        denuncia_dict = dict(row)
-        denuncia_dict['anonimo'] = bool(denuncia_dict['anonimo'])
+        if not row:
+            return jsonify({"error": f"Denúncia com ID {denuncia_id} não encontrada"}), 404
+            
+        row['anonimo'] = bool(row['anonimo'])
         
-        # Broadcast status change event via SSE so admin dashboard updates instantly
-        announce_sse_event('status_atualizado', denuncia_dict)
+        # Broadcast status change event via SSE
+        announce_sse_event('status_atualizado', row)
         
-        return jsonify(denuncia_dict), 200
+        return jsonify(row), 200
         
     except Exception as e:
         return jsonify({"error": f"Erro interno no servidor: {str(e)}"}), 500
+
+@app.route('/api/status', methods=['GET'])
+def get_status():
+    return jsonify({
+        "database": "postgres" if DATABASE_URL else "sqlite",
+        "realtime": not DATABASE_URL
+    }), 200
 
 # Server-Sent Events (SSE) endpoint
 @app.route('/api/sse')
@@ -279,23 +349,21 @@ def sse_endpoint():
         with sse_lock:
             sse_listeners.append(q)
             
-        # Send initial setup ping
         yield f"data: {json.dumps({'type': 'ping', 'message': 'Conexão estabelecida com sucesso'})}\n\n"
         
         try:
             while True:
-                # Blocks until a new message is posted to the queue
                 event_data = q.get()
                 yield f"data: {json.dumps(event_data)}\n\n"
         except GeneratorExit:
-            # Client disconnected
             with sse_lock:
                 if q in sse_listeners:
                     sse_listeners.remove(q)
                     
     return Response(event_generator(), mimetype='text/event-stream')
 
+# Initialize DB on import
+init_db()
+
 if __name__ == '__main__':
-    init_db()
-    # Runs the Flask server on port 5000 (accessible on localhost)
     app.run(host='0.0.0.0', port=5000, debug=True)

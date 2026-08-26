@@ -71,47 +71,62 @@ def fetch_one_as_dict(cursor):
     columns = [col[0] for col in cursor.description]
     return dict(zip(columns, row))
 
+db_initialized = False
+db_init_lock = threading.Lock()
+
 def init_db():
     """Initializes the database table with standard SQLite or PostgreSQL schemas."""
     with app.app_context():
-        db = get_db()
-        cursor = db.cursor()
-        if DATABASE_URL:
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS denuncias (
-                    id SERIAL PRIMARY KEY,
-                    descricao TEXT NOT NULL,
-                    tipo TEXT NOT NULL,
-                    data_ocorrencia TEXT NOT NULL,
-                    local TEXT NOT NULL,
-                    detalhes TEXT,
-                    anonimo INTEGER NOT NULL,
-                    nome TEXT,
-                    contato TEXT,
-                    status TEXT NOT NULL DEFAULT 'Nova',
-                    data_envio TEXT NOT NULL
-                )
-            ''')
-            db.commit()
-        else:
-            if not os.path.exists(DATABASE_SQLITE):
-                open(DATABASE_SQLITE, 'w').close()
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS denuncias (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    descricao TEXT NOT NULL,
-                    tipo TEXT NOT NULL,
-                    data_ocorrencia TEXT NOT NULL,
-                    local TEXT NOT NULL,
-                    detalhes TEXT,
-                    anonimo INTEGER NOT NULL,
-                    nome TEXT,
-                    contato TEXT,
-                    status TEXT NOT NULL DEFAULT 'Nova',
-                    data_envio TEXT NOT NULL
-                )
-            ''')
-            db.commit()
+        try:
+            db = get_db()
+            cursor = db.cursor()
+            if DATABASE_URL:
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS denuncias (
+                        id SERIAL PRIMARY KEY,
+                        descricao TEXT NOT NULL,
+                        tipo TEXT NOT NULL,
+                        data_ocorrencia TEXT NOT NULL,
+                        local TEXT NOT NULL,
+                        detalhes TEXT,
+                        anonimo INTEGER NOT NULL,
+                        nome TEXT,
+                        contato TEXT,
+                        status TEXT NOT NULL DEFAULT 'Nova',
+                        data_envio TEXT NOT NULL
+                    )
+                ''')
+                db.commit()
+            else:
+                if not os.path.exists(DATABASE_SQLITE):
+                    open(DATABASE_SQLITE, 'w').close()
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS denuncias (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        descricao TEXT NOT NULL,
+                        tipo TEXT NOT NULL,
+                        data_ocorrencia TEXT NOT NULL,
+                        local TEXT NOT NULL,
+                        detalhes TEXT,
+                        anonimo INTEGER NOT NULL,
+                        nome TEXT,
+                        contato TEXT,
+                        status TEXT NOT NULL DEFAULT 'Nova',
+                        data_envio TEXT NOT NULL
+                    )
+                ''')
+                db.commit()
+        except Exception as e:
+            app.logger.error(f"Erro ao inicializar o banco de dados: {e}")
+
+@app.before_request
+def initialize_on_first_request():
+    global db_initialized
+    if not db_initialized:
+        with db_init_lock:
+            if not db_initialized:
+                init_db()
+                db_initialized = True
 
 # Route definitions for Static Files
 @app.route('/')
@@ -362,8 +377,7 @@ def sse_endpoint():
                     
     return Response(event_generator(), mimetype='text/event-stream')
 
-# Initialize DB on import
-init_db()
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -42,8 +42,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('data_ocorrencia').setAttribute('max', today);
 
-    // Dynamic Database mode detection
-    checkDatabaseMode();
+    // Initialization
+    init();
+
+    async function init() {
+        await checkDatabaseMode();
+        await checkAuth();
+        setupLogout();
+    }
 
     async function checkDatabaseMode() {
         if (IS_VERCEL_STATIC) {
@@ -70,22 +76,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function checkAuth() {
+        if (IS_VERCEL_STATIC) {
+            // LocalStorage Simulation Mode: check role in localStorage
+            const role = localStorage.getItem('role');
+            if (role !== 'aluno' && role !== 'admin') {
+                window.location.href = '/login';
+            }
+        } else {
+            // API Mode
+            try {
+                const response = await fetch('/api/me');
+                if (!response.ok) {
+                    window.location.href = '/login';
+                }
+            } catch (e) {
+                window.location.href = '/login';
+            }
+        }
+    }
+
     // ==========================================
     // LOGOUT LOGIC
     // ==========================================
-    if (btnLogout) {
-        btnLogout.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/logout', { method: 'POST' });
-                if (response.ok) {
+    function setupLogout() {
+        if (btnLogout) {
+            btnLogout.addEventListener('click', async () => {
+                if (IS_VERCEL_STATIC) {
+                    localStorage.removeItem('role');
                     window.location.href = '/login';
                 } else {
-                    window.location.href = '/login';
+                    try {
+                        const response = await fetch('/api/logout', { method: 'POST' });
+                        window.location.href = '/login';
+                    } catch (error) {
+                        window.location.href = '/login';
+                    }
                 }
-            } catch (error) {
-                window.location.href = '/login';
-            }
-        });
+            });
+        }
     }
 
     // ==========================================
@@ -443,6 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return isValid;
     }
 
+    // Input error setters
     function setInputError(inputElement) {
         const group = inputElement.closest('.form-group');
         group.classList.add('invalid');

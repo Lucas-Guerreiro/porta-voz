@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function init() {
         await checkDatabaseMode();
+        await checkAuth();
         setupLogout();
         await fetchDenuncias();
         setupSSE();
@@ -84,19 +85,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function checkAuth() {
+        if (IS_VERCEL_STATIC) {
+            // LocalStorage Simulation Mode: check role in localStorage
+            const role = localStorage.getItem('role');
+            if (role !== 'admin') {
+                window.location.href = '/login';
+            }
+        } else {
+            // API Mode
+            try {
+                const response = await fetch('/api/me');
+                if (!response.ok) {
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                if (data.role !== 'admin') {
+                    window.location.href = '/login';
+                }
+            } catch (e) {
+                window.location.href = '/login';
+            }
+        }
+    }
+
     // Set up logout button handler
     function setupLogout() {
         if (btnLogout) {
             btnLogout.addEventListener('click', async () => {
-                try {
-                    const response = await fetch('/api/logout', { method: 'POST' });
-                    if (response.ok) {
+                if (IS_VERCEL_STATIC) {
+                    localStorage.removeItem('role');
+                    window.location.href = '/login';
+                } else {
+                    try {
+                        const response = await fetch('/api/logout', { method: 'POST' });
                         window.location.href = '/login';
-                    } else {
+                    } catch (error) {
                         window.location.href = '/login';
                     }
-                } catch (error) {
-                    window.location.href = '/login';
                 }
             });
         }

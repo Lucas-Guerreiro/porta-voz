@@ -24,6 +24,10 @@
       "dest": "static/admin.html"
     },
     {
+      "src": "/login",
+      "dest": "static/login.html"
+    },
+    {
       "src": "/(.*)",
       "dest": "static/index.html"
     }

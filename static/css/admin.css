@@ -814,3 +814,25 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+.btn-logout-admin {
+    background-color: transparent;
+    border: 1.5px solid #cbd5e1;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-logout-admin:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background-color: var(--primary-light);
+}

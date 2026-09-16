@@ -74,7 +74,7 @@ class PortaVozTestCase(unittest.TestCase):
     def test_create_anonymous_denuncia(self):
         """Test sending a valid anonymous report after logging in."""
         # Must login first
-        self.login_as('aluno', 'aluno123')
+        self.login_as('aluno', 'Alu@VozSegura#2026!')
         
         payload = {
             "descricao": "Bullying pátio",
@@ -107,7 +107,7 @@ class PortaVozTestCase(unittest.TestCase):
     def test_create_identified_denuncia(self):
         """Test sending a valid identified report."""
         # Must login first
-        self.login_as('aluno', 'aluno123')
+        self.login_as('aluno', 'Alu@VozSegura#2026!')
         
         payload = {
             "descricao": "Agressão verbal",
@@ -134,7 +134,7 @@ class PortaVozTestCase(unittest.TestCase):
     def test_create_denuncia_validation_errors(self):
         """Test validation rules for missing fields and bad choices."""
         # Must login first
-        self.login_as('aluno', 'aluno123')
+        self.login_as('aluno', 'Alu@VozSegura#2026!')
         
         # 1. Missing description
         payload = {
@@ -187,7 +187,7 @@ class PortaVozTestCase(unittest.TestCase):
     def test_get_denuncias_and_filtering(self):
         """Test retrieving all reports and verifying filter parameters."""
         # 1. Login as Aluno to submit reports
-        self.login_as('aluno', 'aluno123')
+        self.login_as('aluno', 'Alu@VozSegura#2026!')
         
         d1 = {
             "descricao": "Bullying",
@@ -217,7 +217,7 @@ class PortaVozTestCase(unittest.TestCase):
         self.assertEqual(res_fail.status_code, 401)
         
         # Log in as Admin
-        self.login_as('admin', 'admin123')
+        self.login_as('admin', 'Adm@VozSegura#2026!')
 
         # Get all
         response = self.client.get('/api/denuncias')
@@ -246,7 +246,7 @@ class PortaVozTestCase(unittest.TestCase):
     def test_update_status(self):
         """Test status transitions."""
         # Submit report as Aluno
-        self.login_as('aluno', 'aluno123')
+        self.login_as('aluno', 'Alu@VozSegura#2026!')
         d = {
             "descricao": "Bullying",
             "tipo": "Bullying",
@@ -259,7 +259,7 @@ class PortaVozTestCase(unittest.TestCase):
         self.logout()
 
         # Login as Admin to fetch and update status
-        self.login_as('admin', 'admin123')
+        self.login_as('admin', 'Adm@VozSegura#2026!')
 
         # Initial status check
         res = self.client.get(f'/api/denuncias/{inserted_id}')
@@ -285,7 +285,7 @@ class PortaVozTestCase(unittest.TestCase):
     def test_get_public_denuncia_by_id(self):
         """Test retrieving a report through the secure public tracking route."""
         # Submit report as Aluno
-        self.login_as('aluno', 'aluno123')
+        self.login_as('aluno', 'Alu@VozSegura#2026!')
         d = {
             "descricao": "Bullying",
             "tipo": "Bullying",

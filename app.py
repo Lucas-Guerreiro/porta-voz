@@ -186,13 +186,18 @@ def login():
         username = data['username'].strip().lower()
         password = data['password']
         
-        # Test Credentials
-        if username == 'admin' and password == 'admin123':
-            session['user'] = 'admin'
+        # Credentials loaded from environment variables (never hardcoded in production)
+        admin_user = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_pass = os.environ.get('ADMIN_PASSWORD', 'Adm@VozSegura#2026!')
+        aluno_user = os.environ.get('ALUNO_USERNAME', 'aluno')
+        aluno_pass = os.environ.get('ALUNO_PASSWORD', 'Alu@VozSegura#2026!')
+
+        if username == admin_user and password == admin_pass:
+            session['user'] = admin_user
             session['role'] = 'admin'
             return jsonify({"message": "Login realizado com sucesso", "role": "admin"}), 200
-        elif username == 'aluno' and password == 'aluno123':
-            session['user'] = 'aluno'
+        elif username == aluno_user and password == aluno_pass:
+            session['user'] = aluno_user
             session['role'] = 'aluno'
             return jsonify({"message": "Login realizado com sucesso", "role": "aluno"}), 200
         else:
